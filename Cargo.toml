@@ -12,9 +12,14 @@ mpe-plugin-sdk = { git = "https://github.com/multi-protocol-flow/mpe-plugin-sdk.
 # + `transport-io` features so the bundled `mcp_test_server` binary can serve
 # the stdio transport used by the integration tests.
 rmcp = { version = "1.5", default-features = false, features = ["client", "transport-streamable-http-client-reqwest", "transport-child-process", "server", "transport-io"] }
-# HTTP 客户端（用于自定义请求头；rustls 后端，与宿主一致）
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
-rustls = { version = "0.23", features = ["ring"] }
+# HTTP 客户端（用于自定义请求头；rustls 后端，与宿主一致）。用
+# `rustls-no-provider`（而非 `rustls`）避免引入 aws-lc-rs：aws-lc-sys 在
+# glibc < 2.38 的 Linux（如 Ubuntu 22.04）上链接失败（__isoc23_* 符号），
+# 且其产物在旧系统无法运行；ring 后端由下方 rustls 依赖单独提供。
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+# default-features = false: rustls 默认 features 含 aws_lc_rs（其 aws-lc-sys 在
+# glibc < 2.38 上链接失败且产物无法运行）；ring 后端显式列出所需 features。
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
