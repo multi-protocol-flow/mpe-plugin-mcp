@@ -1,0 +1,37 @@
+[package]
+name = "mpe-plugin-mcp"
+version = "0.1.0"
+edition = "2021"
+description = "MCP protocol sidecar plugin: connect/call_tool/read_resource/get_prompt/close"
+
+[dependencies]
+# Official plugin: public SDK only, never host types (flow-engine-core etc.)
+mpe-plugin-sdk = { git = "https://github.com/multi-protocol-flow/mpe-plugin-sdk.git", tag = "v0.1.0" }
+# MCP SDK. Features copied verbatim from the former host crate
+# flow-engine-mcp (that crate's features are known-good), plus the `server`
+# + `transport-io` features so the bundled `mcp_test_server` binary can serve
+# the stdio transport used by the integration tests.
+rmcp = { version = "1.5", default-features = false, features = ["client", "transport-streamable-http-client-reqwest", "transport-child-process", "server", "transport-io"] }
+# HTTP 客户端（用于自定义请求头；rustls 后端，与宿主一致）
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+rustls = { version = "0.23", features = ["ring"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+# 集成测试用临时目录（当前未使用，保留以对齐 redis 插件模板）
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+
+[[bin]]
+name = "mpe_mcp_plugin"
+path = "src/main.rs"
+
+# 集成测试用的 stdio MCP 测试服务器（rmcp server，暴露 echo 工具 / config
+# 资源 / greet 提示词）。cargo 为包内 [[bin]] 注入 CARGO_BIN_EXE_mcp_test_server。
+[[bin]]
+name = "mcp_test_server"
+path = "src/bin/test_server.rs"

@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP Config Panel</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #6b7280;
+    --border: #d0d7de;
+    --accent: #f59e0b;
+    --accent-fg: #1f2328;
+    --danger: #dc2626;
+    --ok: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1d21;
+      --fg: #e6e6e6;
+      --muted: #9ca3af;
+      --border: #3f444c;
+      --accent-fg: #111827;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 12px;
+    font: 13px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  .field { margin-bottom: 10px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  input[type="text"], input[type="url"], input[type="number"], select, textarea {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+  }
+  textarea { resize: vertical; min-height: 48px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .row > * { flex: 1; min-width: 0; }
+  .row .k { flex: 0 0 34%; }
+  .row .del { flex: 0 0 auto; }
+  button {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--fg);
+    font: inherit;
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .error { color: var(--danger); font-size: 12px; margin-top: 6px; }
+  .ok { color: var(--ok); font-size: 12px; margin-top: 6px; }
+  .discovered { margin-top: 8px; border: 1px solid var(--border); border-radius: 6px; }
+  .discovered summary { cursor: pointer; padding: 6px 8px; font-weight: 600; font-size: 12px; }
+  .discovered .items { padding: 0 8px 8px; }
+  .item { padding: 4px 0; border-top: 1px solid var(--border); }
+  .item .name { font-weight: 600; font-size: 12px; }
+  .item .desc { font-size: 11px; color: var(--muted); }
+  .mime { display: inline-block; margin-left: 6px; padding: 0 5px; border: 1px solid var(--border); border-radius: 4px; font-size: 10px; color: var(--muted); }
+  .badge { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+  .badge.ok { background: rgba(22,163,74,0.15); color: var(--ok); }
+  .badge.err { background: rgba(220,38,38,0.15); color: var(--danger); }
+  .kv-grid { display: grid; grid-template-columns: 1fr 1fr auto; gap: 4px; margin-bottom: 4px; align-items: center; }
+  table.params { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  table.params th, table.params td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); font-size: 12px; }
+  table.params th { color: var(--muted); font-weight: 600; }
+  .tool-arg { margin-top: 6px; }
+  .switch { display: flex; align-items: center; gap: 6px; }
+  .switch input { width: auto; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function () {
+  "use strict";
+
+  /* ============================================================
+   * i18n (inline dictionary; minimal fields per plan D9)
+   * ============================================================ */
+  var T = {
+    "en-US": {
+      transport: "Transport",
+      url: "Server URL",
+      protocolVersion: "Protocol version",
+      headers: "Headers",
+      headerKey: "Header name",
+      headerValue: "Header value",
+      command: "Command",
+      args: "Arguments",
+      argValue: "Argument",
+      env: "Environment",
+      envKey: "Env var",
+      envValue: "Value",
+      addRow: "+ Add",
+      discover: "Discover server",
+      discovering: "Discovering…",
+      refreshTools: "Refresh tools",
+      refreshResources: "Refresh resources",
+      refreshPrompts: "Refresh prompts",
+      connection: "MCP connection",
+      noConnections: "No mcp:connect nodes yet — type a connection id manually",
+      manualId: "Connection id (manual)",
+      tool: "Tool",
+      noTools: "No tools discovered — click refresh to list",
+      resource: "Resource",
+      noResources: "No resources discovered — click refresh to list",
+      prompt: "Prompt",
+      noPrompts: "No prompts discovered — click refresh to list",
+      promptArgs: "Prompt arguments",
+      toolArgs: "Tool arguments",
+      jsonArgs: "Arguments (JSON)",
+      resourceUri: "Resource URI",
+      promptName: "Prompt name",
+      toolName: "Tool name",
+      discoverError: "Discovery failed",
+      selectFirst: "Select a connection first",
+      toolsLabel: "tools",
+      resourcesLabel: "resources",
+      promptsLabel: "prompts",
+      paramsTable: "Parameters",
+      optional: "optional",
+      required: "required",
+      cached: "from saved discovery",
+    },
+    "zh-CN": {
+      transport: "传输模式",
+      url: "服务器 URL",
+      protocolVersion: "协议版本",
+      headers: "请求头",
+      headerKey: "头名称",
+      headerValue: "头值",
+      command: "可执行文件",
+      args: "命令参数",
+      argValue: "参数",
+      env: "环境变量",
+      envKey: "变量名",
+      envValue: "值",
+      addRow: "+ 添加",
+      discover: "发现服务",
+      discovering: "发现中…",
+      refreshTools: "刷新工具",
+      refreshResources: "刷新资源",
+      refreshPrompts: "刷新提示词",
+      connection: "MCP 连接",
+      noConnections: "尚无 mcp:connect 节点 — 可手动输入连接 id",
+      manualId: "连接 id（手动）",
+      tool: "工具",
+      noTools: "未发现工具 — 点击刷新列出",
+      resource: "资源",
+      noResources: "未发现资源 — 点击刷新列出",
+      prompt: "提示词",
+      noPrompts: "未发现提示词 — 点击刷新列出",
+      promptArgs: "提示词参数",
+      toolArgs: "工具参数",
+      jsonArgs: "参数（JSON）",
+      resourceUri: "资源 URI",
+      promptName: "提示词名",
+      toolName: "工具名",
+      discoverError: "发现失败",
+      selectFirst: "请先选择连接",
+      toolsLabel: "个工具",
+      resourcesLabel: "个资源",
+      promptsLabel: "个提示词",
+      paramsTable: "参数",
+      optional: "可选",
+      required: "必填",
+      cached: "来自已保存的发现",
+    },
+  };
+
+  /* ============================================================
+   * State + bridge
+   * ============================================================ */
+  var state = {
+    config: {},
+    variables: {},
+    nodeType: "",
+    locale: "en-US",
+    nodes: [],
+    discoverCache: null, // {tools, resources, prompts} for the connect panel
+  };
+  var pendingActions = {};
+  var actionSeq = 0;
+
+  function t(key) {
+    var dict = T[state.locale] || T["en-US"];
+    return dict[key] !== undefined ? dict[key] : key;
+  }
+
+  /** Post a protocol message to the host (sandboxed opaque origin: '*' is the
+   * only reachable target; identity is enforced by the host via event.source). */
+  function post(type, payload) {
+    parent.postMessage({ type: type, payload: payload || {} }, "*");
+  }
+
+  function reportError(message) {
+    post("error", { message: String(message) });
+  }
+
+  /** requestAction round-trip with a 30s timeout (promise map). */
+  function requestAction(action, params) {
+    return new Promise(function (resolve, reject) {
+      var id = "req-" + (++actionSeq) + "-" + Date.now();
+      pendingActions[id] = { resolve: resolve, reject: reject };
+      post("requestAction", { requestId: id, action: action, params: params });
+      setTimeout(function () {
+        if (pendingActions[id]) {
+          delete pendingActions[id];
+          reject(new Error("requestAction timeout: " + action));
+        }
+      }, 30000);
+    });
+  }
+
+  /** uiCall helper — relay a discovery query through the host. */
+  function uiCall(method, params) {
+    return requestAction("uiCall", { method: method, payload: params });
+  }
+
+  /* ============================================================
+   * Variable resolution
+   * ============================================================ */
+  /** Replace {{name}} in strings with init.variables[name]; missing names
+   * stay verbatim. Objects/arrays recurse. */
+  function resolveVars(value) {
+    if (typeof value === "string") {
+      return value.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, function (_, name) {
+        var v = state.variables[name];
+        return v !== undefined && v !== null ? String(v) : "{{" + name + "}}";
+      });
+    }
+    if (Array.isArray(value)) {
+      return value.map(resolveVars);
+    }
+    if (value && typeof value === "object") {
+      var out = {};
+      Object.keys(value).forEach(function (k) {
+        out[k] = resolveVars(value[k]);
+      });
+      return out;
+    }
+    return value;
+  }
+
+  /* ============================================================
+   * Config emit + save helpers
+   * ============================================================ */
+  function emitConfig(next) {
+    state.config = next;
+    post("configChanged", { config: next });
+  }
+
+  /** Update one field and emit the whole config. */
+  function patchConfig(patch) {
+    var next = Object.assign({}, state.config, patch);
+    emitConfig(next);
+  }
+
+  /** Update fields and drop listed keys (e.g. stale discovery snapshot when the
+   *  server target changes). */
+  function patchConfigDrop(patch, dropKeys) {
+    var next = Object.assign({}, state.config, patch);
+    (dropKeys || []).forEach(function (k) { delete next[k]; });
+    emitConfig(next);
+  }
+
+  function setDeep(config, key, value) {
+    config[key] = value;
+    return config;
+  }
+
+  /* ============================================================
+   * Small DOM builders (textContent-based; no innerHTML injection)
+   * ============================================================ */
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        if (k === "class") node.className = attrs[k];
+        else if (k === "value") node.value = attrs[k];
+        else if (k === "checked") node.checked = attrs[k];
+        else if (k.startsWith("on") && typeof attrs[k] === "function") {
+          node.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+        } else node.setAttribute(k, attrs[k]);
+      });
+    }
+    (children || []).forEach(function (c) {
+      if (c === null || c === undefined) return;
+      if (c.nodeType) node.appendChild(c);
+      else node.appendChild(document.createTextNode(String(c)));
+    });
+    return node;
+  }
+
+  function field(labelText, control, hint) {
+    var wrap = el("div", { class: "field" }, [
+      el("label", {}, [labelText]),
+      control,
+    ]);
+    if (hint) wrap.appendChild(el("div", { class: "hint" }, [hint]));
+    return wrap;
+  }
+
+  /** Key/value row editor used for headers + env.
+   *  `kind` selects the placeholder labels ("header" | "env"). An add-row
+   *  button is always rendered so an empty config is still editable. */
+  function kvEditor(rows, onRows, kind) {
+    var wrap = el("div", {});
+    function render() {
+      wrap.textContent = "";
+      rows.forEach(function (row, i) {
+        var keyPh = kind === "header" ? t("headerKey") : t("envKey");
+        var valPh = kind === "header" ? t("headerValue") : t("envValue");
+        var keyInput = el("input", {
+          type: "text",
+          placeholder: row.k ? "" : keyPh,
+          value: row.k || "",
+          oninput: function (e) {
+            rows[i].k = e.target.value;
+            onRows(rows.slice());
+          },
+        });
+        var valInput = el("input", {
+          type: "text",
+          placeholder: row.v ? "" : valPh,
+          value: row.v || "",
+          oninput: function (e) {
+            rows[i].v = e.target.value;
+            onRows(rows.slice());
+          },
+        });
+        var del = el("button", {
+          class: "del",
+          onclick: function () {
+            rows.splice(i, 1);
+            render();
+            onRows(rows.slice());
+          },
+        }, ["×"]);
+        wrap.appendChild(el("div", { class: "row" }, [
+          el("div", { class: "k" }, [keyInput]),
+          valInput,
+          del,
+        ]));
+      });
+      wrap.appendChild(el("button", {
+        class: "primary",
+        onclick: function () {
+          rows.push({ k: "", v: "", isKey: rows.length > 0 ? rows[0].isKey : true });
+          render();
+          onRows(rows.slice());
+        },
+      }, [t("addRow")]));
+    }
+    render();
+    return wrap;
+  }
+
+  /* ============================================================
+   * Connection dropdown (shared by the four operation panels)
+   * ============================================================ */
+  function connectionSelect(value, onchange) {
+    var connects = (state.nodes || []).filter(function (n) { return n.type === "mcp:connect"; });
+    var select = el("select", {
+      onchange: function (e) { onchange(e.target.value); },
+    });
+    if (connects.length === 0) {
+      select.appendChild(el("option", { value: "" }, [t("noConnections")]));
+    } else {
+      select.appendChild(el("option", { value: "" }, ["— " + t("selectFirst") + " —"]));
+      connects.forEach(function (n) {
+        var opt = el("option", { value: n.uuid }, [n.label + " (" + (n.config.transport || "mcp:connect") + ")"]);
+        if (n.uuid === value) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+    return select;
+  }
+
+  function findConnectNode(uuid) {
+    return (state.nodes || []).find(function (n) { return n.uuid === uuid && n.type === "mcp:connect"; });
+  }
+
+  /** Discovery params for a connection: its own config (variables resolved). */
+  function discoveryParamsFor(node) {
+    var cfg = node ? node.config || {} : {};
+    var params = {
+      transport: cfg.transport || "streamable_http",
+      url: cfg.url || "",
+      headers: cfg.headers || {},
+      protocol_version: cfg.protocol_version || "2025-11-25",
+      command: cfg.command || "",
+      args: cfg.args || [],
+      env: cfg.env || {},
+    };
+    return resolveVars(params);
+  }
+
+  /* ============================================================
+   * Discovery snapshot (persisted on the mcp:connect config)
+   * ============================================================ */
+  /** Keys persisted on the connect config by the "Discover server" button. */
+  var DISCOVERY_KEYS = ["discovered_tools", "discovered_resources", "discovered_prompts"];
+
+  /** Snapshot saved on the connect node's own config (survives save/reload). */
+  function savedDiscovery(cfg) {
+    cfg = cfg || state.config || {};
+    return {
+      tools: Array.isArray(cfg.discovered_tools) ? cfg.discovered_tools : [],
+      resources: Array.isArray(cfg.discovered_resources) ? cfg.discovered_resources : [],
+      prompts: Array.isArray(cfg.discovered_prompts) ? cfg.discovered_prompts : [],
+    };
+  }
+
+  /** Session discovery cache falls back to the persisted snapshot. */
+  function currentDiscovery() {
+    if (state.discoverCache) return state.discoverCache;
+    return savedDiscovery(state.config);
+  }
+
+  /** Persisted snapshot of a connect node from the flow snapshot — downstream
+   *  operation panels reference this instead of re-discovering. */
+  function nodeDiscovery(node) {
+    if (!node || !node.config) return { tools: [], resources: [], prompts: [] };
+    return {
+      tools: Array.isArray(node.config.discovered_tools) ? node.config.discovered_tools : [],
+      resources: Array.isArray(node.config.discovered_resources) ? node.config.discovered_resources : [],
+      prompts: Array.isArray(node.config.discovered_prompts) ? node.config.discovered_prompts : [],
+    };
+  }
+
+  /** Copy of a config without the persisted snapshot (server target changed →
+   *  snapshot is stale). */
+  function clearSavedDiscovery(cfg) {
+    var next = Object.assign({}, cfg);
+    DISCOVERY_KEYS.forEach(function (k) { delete next[k]; });
+    return next;
+  }
+
+  /* ============================================================
+   * Argument form renderers (per input_schema)
+   * ============================================================ */
+  /** Renders inputs for schema.properties into `arguments` (object). */
+  function renderArgumentFields(schema, argumentsObj, onChange) {
+    var wrap = el("div", { class: "tool-arg" }, []);
+    if (!schema || !schema.properties) {
+      // Complex/unknown schema → JSON textarea fallback.
+      var jsonArea = el("textarea", {
+        placeholder: t("jsonArgs"),
+        value: Object.keys(argumentsObj).length ? JSON.stringify(argumentsObj, null, 2) : "",
+        oninput: function (e) {
+          var parsed = {};
+          var raw = e.target.value.trim();
+          if (raw) {
+            try { parsed = JSON.parse(raw); }
+            catch (err) { return; /* keep last good value; emit nothing */ }
+          }
+          onChange(parsed);
+        },
+      });
+      wrap.appendChild(field(t("toolArgs"), jsonArea));
+      return wrap;
+    }
+    var props = schema.properties;
+    var table = el("table", { class: "params" }, [
+      el("thead", {}, [el("tr", {}, [
+        el("th", {}, [t("paramsTable")]),
+        el("th", {}, [t("toolArgs")]),
+      ])]),
+    ]);
+    var tbody = el("tbody", {});
+    table.appendChild(tbody);
+    Object.keys(props).forEach(function (key) {
+      var prop = props[key] || {};
+      var required = Array.isArray(schema.required) && schema.required.indexOf(key) !== -1;
+      var label = el("td", {}, [key + (required ? " *" : "")]);
+      var inputCell = el("td", {}, [argInput(key, prop, argumentsObj, onChange)]);
+      tbody.appendChild(el("tr", {}, [label, inputCell]));
+    });
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  function argInput(key, prop, argumentsObj, onChange) {
+    var type = prop.type || "string";
+    var input;
+    var apply = function (value) {
+      var next = Object.assign({}, argumentsObj);
+      if (value === "" || value === undefined || value === null) delete next[key];
+      else next[key] = value;
+      onChange(next);
+    };
+    if (prop.enum && Array.isArray(prop.enum)) {
+      input = el("select", {
+        onchange: function (e) { apply(e.target.value === "" ? undefined : e.target.value); },
+      });
+      input.appendChild(el("option", { value: "" }, ["—"]));
+      prop.enum.forEach(function (opt) {
+        var o = el("option", { value: String(opt) }, [String(opt)]);
+        if (String(argumentsObj[key]) === String(opt)) o.selected = true;
+        input.appendChild(o);
+      });
+    } else if (type === "boolean") {
+      input = el("div", { class: "switch" }, [
+        el("input", {
+          type: "checkbox",
+          checked: !!argumentsObj[key],
+          onchange: function (e) { apply(!!e.target.checked); },
+        }),
+      ]);
+    } else if (type === "integer" || type === "number") {
+      input = el("input", {
+        type: "number",
+        value: argumentsObj[key] !== undefined ? String(argumentsObj[key]) : "",
+        oninput: function (e) {
+          var raw = e.target.value.trim();
+          apply(raw === "" ? undefined : Number(raw));
+        },
+      });
+    } else if (type === "array") {
+      input = el("input", {
+        type: "text",
+        value: Array.isArray(argumentsObj[key])
+          ? argumentsObj[key].map(String).join(", ")
+          : "",
+        placeholder: "a, b, c",
+        oninput: function (e) {
+          var raw = e.target.value.trim();
+          apply(raw === "" ? undefined : raw.split(",").map(function (s) { return s.trim(); }).filter(Boolean));
+        },
+      });
+    } else {
+      input = el("input", {
+        type: "text",
+        value: argumentsObj[key] !== undefined ? String(argumentsObj[key]) : "",
+        oninput: function (e) { apply(e.target.value); },
+      });
+    }
+    return input;
+  }
+
+  /* ============================================================
+   * Panels
+   * ============================================================ */
+  var app = document.getElementById("app");
+
+  /** mcp:connect — transport/url/headers/command/args/env + discovery. */
+  function renderConnectPanel() {
+    var cfg = state.config || {};
+    var transport = cfg.transport || "streamable_http";
+    var appEl = el("div", {});
+
+    var transportSelect = el("select", {
+      onchange: function (e) {
+        var v = e.target.value;
+        patchConfigDrop({ transport: v }, DISCOVERY_KEYS);
+        state.discoverCache = null;
+        render();
+      },
+    });
+    ["streamable_http", "stdio"].forEach(function (mode) {
+      var o = el("option", { value: mode }, [mode]);
+      if (mode === transport) o.selected = true;
+      appEl;
+      transportSelect.appendChild(o);
+    });
+    appEl.appendChild(field(t("transport"), transportSelect));
+
+    // streamable_http branch: url + headers
+    var httpBlock = el("div", {});
+    if (transport === "streamable_http") {
+      var urlInput = el("input", {
+        type: "url",
+        placeholder: "https://example.com/mcp",
+        value: cfg.url || "",
+        oninput: function (e) {
+          patchConfigDrop({ url: e.target.value }, DISCOVERY_KEYS);
+          state.discoverCache = null;
+        },
+      });
+      httpBlock.appendChild(field(t("url"), urlInput));
+      var headerRows = toRows(cfg.headers || {});
+      var headers = kvEditor(headerRows, function (rows) {
+        patchConfigDrop({ headers: rowsToObj(rows) }, DISCOVERY_KEYS);
+        state.discoverCache = null;
+      }, "header");
+      httpBlock.appendChild(field(t("headers"), headers));
+    }
+
+    // stdio branch: command + args + env
+    var stdioBlock = el("div", {});
+    if (transport === "stdio") {
+      var cmdInput = el("input", {
+        type: "text",
+        placeholder: "npx",
+        value: cfg.command || "",
+        oninput: function (e) {
+          patchConfigDrop({ command: e.target.value }, DISCOVERY_KEYS);
+          state.discoverCache = null;
+        },
+      });
+      stdioBlock.appendChild(field(t("command"), cmdInput));
+
+      var argRows = (cfg.args || []).map(function (a, i) { return { k: "", v: String(a), isKey: false, idx: i }; });
+      var argsEditor = el("div", {});
+      function renderArgs() {
+        argsEditor.textContent = "";
+        argRows.forEach(function (row, i) {
+          var val = el("input", {
+            type: "text",
+            placeholder: i === 0 ? t("argValue") : "",
+            value: row.v,
+            oninput: function (e) {
+              argRows[i].v = e.target.value;
+              patchConfigDrop({ args: argRows.map(function (r) { return r.v; }).filter(function (s) { return s !== ""; }) }, DISCOVERY_KEYS);
+              state.discoverCache = null;
+            },
+          });
+          var del = el("button", { class: "del", onclick: function () {
+            argRows.splice(i, 1);
+            patchConfigDrop({ args: argRows.map(function (r) { return r.v; }).filter(function (s) { return s !== ""; }) }, DISCOVERY_KEYS);
+            state.discoverCache = null;
+            renderArgs();
+          } }, ["×"]);
+          argsEditor.appendChild(el("div", { class: "row" }, [val, del]));
+        });
+      }
+      renderArgs();
+      var addArg = el("button", {
+        class: "primary",
+        onclick: function () {
+          argRows.push({ k: "", v: "", isKey: false });
+          renderArgs();
+        },
+      }, [t("addRow")]);
+      argsEditor.appendChild(addArg);
+      stdioBlock.appendChild(field(t("args"), argsEditor));
+
+      var envRows = toRows(cfg.env || {});
+      var envEditor = kvEditor(envRows, function (rows) {
+        patchConfigDrop({ env: rowsToObj(rows) }, DISCOVERY_KEYS);
+        state.discoverCache = null;
+      }, "env");
+      stdioBlock.appendChild(field(t("env"), envEditor));
+    }
+
+    var protoInput = el("input", {
+      type: "text",
+      value: cfg.protocol_version || "2025-11-25",
+      oninput: function (e) { patchConfig({ protocol_version: e.target.value }); },
+    });
+    httpBlock.appendChild(field(t("protocolVersion"), protoInput));
+
+    // Discover button + result list
+    var status = el("div", {});
+    var discoveryBox = el("div", {});
+    var discoverBtn = el("button", { class: "primary" }, [t("discover")]);
+    discoverBtn.addEventListener("click", async function () {
+      discoverBtn.disabled = true;
+      discoverBtn.textContent = t("discovering");
+      status.textContent = "";
+      try {
+        var params = buildDiscoverParams(state.config);
+        var result = await uiCall("mcp.discover", params);
+        var next = Object.assign({}, state.config, {
+          discovered_tools: result.tools || [],
+          discovered_resources: result.resources || [],
+          discovered_prompts: result.prompts || [],
+        });
+        state.discoverCache = { tools: result.tools || [], resources: result.resources || [], prompts: result.prompts || [] };
+        // 持久化到连接节点 config：保存流程后重新加载仍可用，下游调用节点直接引用。
+        emitConfig(next);
+        // 每次发现替换旧列表，避免重复点击时累加
+        discoveryBox.textContent = "";
+        status.appendChild(el("div", { class: "ok" }, [
+          (result.tools || []).length + " " + t("toolsLabel") + ", " +
+          (result.resources || []).length + " " + t("resourcesLabel") + ", " +
+          (result.prompts || []).length + " " + t("promptsLabel")
+        ]));
+        renderDiscovered(discoveryBox, state.discoverCache);
+      } catch (e) {
+        status.appendChild(el("div", { class: "error" }, [t("discoverError") + ": " + e.message]));
+      } finally {
+        discoverBtn.disabled = false;
+        discoverBtn.textContent = t("discover");
+      }
+    });
+    httpBlock.appendChild(discoverBtn);
+    httpBlock.appendChild(status);
+    httpBlock.appendChild(discoveryBox);
+
+    appEl.appendChild(httpBlock);
+    appEl.appendChild(stdioBlock);
+    app.textContent = "";
+    app.appendChild(appEl);
+
+    // 已保存的发现快照（init / 重渲染时）也展示在面板里
+    renderDiscovered(discoveryBox, currentDiscovery());
+  }
+
+  function renderDiscovered(container, discovery) {
+    if (!discovery) return;
+    if (discovery.tools.length) {
+      var tools = el("details", {}, [el("summary", {}, [t("toolsLabel") + " (" + discovery.tools.length + ")"]), el("div", { class: "items" }, discovery.tools.map(function (tool) {
+        var box = el("div", { class: "item" }, [el("div", { class: "name" }, [tool.name])]);
+        if (tool.description) box.appendChild(el("div", { class: "desc" }, [tool.description]));
+        if (tool.input_schema && tool.input_schema.properties) {
+          var tbl = el("table", { class: "params" }, [el("tbody", {}, Object.keys(tool.input_schema.properties).map(function (k) {
+            var p = tool.input_schema.properties[k];
+            return el("tr", {}, [el("td", {}, [k]), el("td", { class: "desc" }, [p.type || "string"])]);
+          }))]);
+          box.appendChild(tbl);
+        }
+        return box;
+      }))]);
+      container.appendChild(tools);
+    }
+    if (discovery.resources.length) {
+      var res = el("details", {}, [el("summary", {}, [t("resourcesLabel") + " (" + discovery.resources.length + ")"]), el("div", { class: "items" }, discovery.resources.map(function (r) {
+        var box = el("div", { class: "item" }, [el("span", { class: "name" }, [r.name || r.uri])]);
+        if (r.mime_type) box.appendChild(el("span", { class: "mime" }, [r.mime_type]));
+        box.appendChild(el("div", { class: "desc" }, [r.uri]));
+        return box;
+      }))]);
+      container.appendChild(res);
+    }
+    if (discovery.prompts.length) {
+      var pro = el("details", {}, [el("summary", {}, [t("promptsLabel") + " (" + discovery.prompts.length + ")"]), el("div", { class: "items" }, discovery.prompts.map(function (p) {
+        var box = el("div", { class: "item" }, [el("div", { class: "name" }, [p.name])]);
+        if (p.description) box.appendChild(el("div", { class: "desc" }, [p.description]));
+        return box;
+      }))]);
+      container.appendChild(pro);
+    }
+  }
+
+  /** Assemble discovery params from the connect panel's live config. */
+  function buildDiscoverParams(cfg) {
+    return resolveVars({
+      transport: cfg.transport || "streamable_http",
+      url: cfg.url || "",
+      headers: cfg.headers || {},
+      protocol_version: cfg.protocol_version || "2025-11-25",
+      command: cfg.command || "",
+      args: cfg.args || [],
+      env: cfg.env || {},
+    });
+  }
+
+  /** mcp:call_tool — connection → refresh tools → tool → args per schema. */
+  function renderCallToolPanel() {
+    var cfg = state.config || {};
+    var appEl = el("div", {});
+    var status = el("div", {});
+    var toolsSelect = el("select", { onchange: null });
+    var argsArea = el("div", {});
+    var discovered = { tools: [] };
+
+    function renderTools() {
+      toolsSelect.textContent = "";
+      var current = cfg.tool_name || "";
+      var exists = discovered.tools.some(function (x) { return x.name === current; });
+      if (discovered.tools.length === 0) {
+        toolsSelect.appendChild(el("option", { value: "" }, [t("noTools")]));
+      } else {
+        // 占位项仅在无选中值或选中值已失效时出现，避免裸横杠
+        if (!current || !exists) toolsSelect.appendChild(el("option", { value: "" }, ["—"]));
+        discovered.tools.forEach(function (tool) {
+          var o = el("option", { value: tool.name }, [tool.name]);
+          if (tool.name === current) o.selected = true;
+          toolsSelect.appendChild(o);
+        });
+      }
+    }
+
+    function renderArgsFor(tool) {
+      argsArea.textContent = "";
+      if (!tool) return;
+      argsArea.appendChild(renderArgumentFields(tool.input_schema, cfg.arguments || {}, function (args) {
+        patchConfig({ arguments: args });
+      }));
+    }
+
+    toolsSelect.addEventListener("change", function (e) {
+      var name = e.target.value;
+      var tool = discovered.tools.find(function (x) { return x.name === name; });
+      patchConfig({ tool_name: name, arguments: tool ? {} : (cfg.arguments || {}) });
+      renderArgsFor(tool);
+    });
+
+    var connSelect = connectionSelect(cfg.connection_id || "", function (uuid) {
+      patchConfig({ connection_id: uuid });
+      if (uuid) {
+        loadTools(uuid, false);
+      }
+    });
+    appEl.appendChild(field(t("connection"), connSelect));
+
+    /** 填充工具下拉：优先引用连接节点已保存的发现快照（不发起网络请求）；
+     *  快照为空且 live 时回退到 uiCall 实时发现（会话级，不写回连接节点）。 */
+    function loadTools(uuid, live) {
+      status.textContent = "";
+      var node = findConnectNode(uuid);
+      if (!node) {
+        status.appendChild(el("div", { class: "error" }, [t("selectFirst")]));
+        return;
+      }
+      var saved = nodeDiscovery(node).tools;
+      if (saved.length > 0) {
+        discovered.tools = saved;
+        renderTools();
+        renderArgsFor(discovered.tools.find(function (x) { return x.name === cfg.tool_name; }));
+        status.appendChild(el("div", { class: "ok" }, [saved.length + " " + t("toolsLabel") + " " + t("cached")]));
+        return;
+      }
+      if (!live) {
+        status.appendChild(el("div", { class: "hint" }, [t("noTools")]));
+        return;
+      }
+      uiCall("mcp.discover", discoveryParamsFor(node))
+        .then(function (result) {
+          discovered.tools = result.tools || [];
+          renderTools();
+          renderArgsFor(discovered.tools.find(function (x) { return x.name === cfg.tool_name; }));
+          status.appendChild(el("div", { class: "ok" }, [discovered.tools.length + " " + t("toolsLabel")]));
+        })
+        .catch(function (e) {
+          status.appendChild(el("div", { class: "error" }, [t("discoverError") + ": " + e.message]));
+        });
+    }
+
+    var refreshBtn = el("button", { class: "primary" }, [t("refreshTools")]);
+    refreshBtn.addEventListener("click", function () {
+      loadTools(cfg.connection_id || "", true);
+    });
+
+    appEl.appendChild(field(t("tool"), toolsSelect));
+    appEl.appendChild(refreshBtn);
+    appEl.appendChild(status);
+    appEl.appendChild(argsArea);
+
+    renderTools();
+    renderArgsFor(discovered.tools.find(function (x) { return x.name === cfg.tool_name; }));
+    if (cfg.connection_id) loadTools(cfg.connection_id, false);
+
+    app.textContent = "";
+    app.appendChild(appEl);
+  }
+
+  /** mcp:read_resource — connection → refresh resources → resource picker. */
+  function renderReadResourcePanel() {
+    var cfg = state.config || {};
+    var appEl = el("div", {});
+    var status = el("div", {});
+    var resources = [];
+
+    var resSelect = el("select", { onchange: function (e) { patchConfig({ resource_uri: e.target.value }); renderMime(); } });
+    function renderResources() {
+      resSelect.textContent = "";
+      var current = cfg.resource_uri || "";
+      var exists = resources.some(function (r) { return r.uri === current; });
+      if (resources.length === 0) {
+        resSelect.appendChild(el("option", { value: "" }, [t("noResources")]));
+      } else {
+        // 占位项仅在无选中值或选中值已失效时出现，避免裸横杠
+        if (!current || !exists) resSelect.appendChild(el("option", { value: "" }, ["—"]));
+        resources.forEach(function (r) {
+          var o = el("option", { value: r.uri }, [r.name || r.uri]);
+          if (r.uri === current) o.selected = true;
+          resSelect.appendChild(o);
+        });
+      }
+    }
+    function renderMime() {
+      // mime 徽章：仅当选中资源带 mime_type 时显示，否则隐藏（避免空边框横杠）
+      // 注意从 state.config 读当前值（渲染期 cfg 闭包在 onchange 后是旧值）
+      var sel = resources.find(function (r) { return r.uri === (state.config.resource_uri || ""); });
+      var mime = sel && sel.mime_type ? sel.mime_type : "";
+      var badge = document.getElementById("mime-badge");
+      if (badge) {
+        badge.textContent = mime;
+        badge.style.display = mime ? "inline-block" : "none";
+      }
+    }
+
+    var connSelect = connectionSelect(cfg.connection_id || "", function (uuid) {
+      patchConfig({ connection_id: uuid });
+      if (uuid) loadResources(uuid, false);
+    });
+    appEl.appendChild(field(t("connection"), connSelect));
+
+    var mimeBadge = el("span", { class: "mime", id: "mime-badge" }, [""]);
+    var resRow = el("div", { class: "row" }, [resSelect, mimeBadge]);
+    appEl.appendChild(field(t("resource"), resRow));
+
+    /** 填充资源下拉：优先引用连接节点已保存的发现快照（不发起网络请求）；
+     *  快照为空且 live 时回退到 uiCall 实时发现（会话级，不写回连接节点）。 */
+    function loadResources(uuid, live) {
+      status.textContent = "";
+      var node = findConnectNode(uuid);
+      if (!node) {
+        status.appendChild(el("div", { class: "error" }, [t("selectFirst")]));
+        return;
+      }
+      var saved = nodeDiscovery(node).resources;
+      if (saved.length > 0) {
+        resources = saved;
+        renderResources();
+        renderMime();
+        status.appendChild(el("div", { class: "ok" }, [saved.length + " " + t("resourcesLabel") + " " + t("cached")]));
+        return;
+      }
+      if (!live) {
+        status.appendChild(el("div", { class: "hint" }, [t("noResources")]));
+        return;
+      }
+      uiCall("mcp.discover", discoveryParamsFor(node))
+        .then(function (result) {
+          resources = result.resources || [];
+          renderResources();
+          renderMime();
+          status.appendChild(el("div", { class: "ok" }, [resources.length + " " + t("resourcesLabel")]));
+        })
+        .catch(function (e) {
+          status.appendChild(el("div", { class: "error" }, [t("discoverError") + ": " + e.message]));
+        });
+    }
+
+    var refreshBtn = el("button", { class: "primary" }, [t("refreshResources")]);
+    refreshBtn.addEventListener("click", function () { loadResources(cfg.connection_id || "", true); });
+    appEl.appendChild(refreshBtn);
+    appEl.appendChild(status);
+
+    renderResources();
+    app.textContent = "";
+    app.appendChild(appEl);
+    // mime 徽章用 getElementById 查找，必须先挂载 DOM 再初始化/加载
+    renderMime();
+    if (cfg.connection_id) loadResources(cfg.connection_id, false);
+  }
+
+  /** mcp:get_prompt — connection → refresh prompts → prompt → args. */
+  function renderGetPromptPanel() {
+    var cfg = state.config || {};
+    var appEl = el("div", {});
+    var status = el("div", {});
+    var prompts = [];
+    var argsArea = el("div", {});
+
+    var promptSelect = el("select", { onchange: function (e) {
+      var name = e.target.value;
+      var p = prompts.find(function (x) { return x.name === name; });
+      patchConfig({ prompt_name: name, arguments: p ? {} : (cfg.arguments || {}) });
+      renderArgs(p);
+    } });
+    function renderPrompts() {
+      promptSelect.textContent = "";
+      var current = cfg.prompt_name || "";
+      var exists = prompts.some(function (p) { return p.name === current; });
+      if (prompts.length === 0) {
+        promptSelect.appendChild(el("option", { value: "" }, [t("noPrompts")]));
+      } else {
+        // 占位项仅在无选中值或选中值已失效时出现，避免裸横杠
+        if (!current || !exists) promptSelect.appendChild(el("option", { value: "" }, ["—"]));
+        prompts.forEach(function (p) {
+          var o = el("option", { value: p.name }, [p.name]);
+          if (p.name === current) o.selected = true;
+          promptSelect.appendChild(o);
+        });
+      }
+    }
+    function renderArgs(prompt) {
+      argsArea.textContent = "";
+      if (!prompt) return;
+      var schema = null;
+      if (prompt.arguments && prompt.arguments.length) {
+        var props = {};
+        var required = [];
+        prompt.arguments.forEach(function (a) {
+          props[a.name] = { type: "string", description: a.description || undefined };
+          if (a.required) required.push(a.name);
+        });
+        schema = { type: "object", properties: props, required: required };
+      }
+      argsArea.appendChild(renderArgumentFields(schema, cfg.arguments || {}, function (args) {
+        patchConfig({ arguments: args });
+      }));
+    }
+
+    var connSelect = connectionSelect(cfg.connection_id || "", function (uuid) {
+      patchConfig({ connection_id: uuid });
+      if (uuid) loadPrompts(uuid, false);
+    });
+    appEl.appendChild(field(t("connection"), connSelect));
+
+    /** 填充提示词下拉：优先引用连接节点已保存的发现快照（不发起网络请求）；
+     *  快照为空且 live 时回退到 uiCall 实时发现（会话级，不写回连接节点）。 */
+    function loadPrompts(uuid, live) {
+      status.textContent = "";
+      var node = findConnectNode(uuid);
+      if (!node) {
+        status.appendChild(el("div", { class: "error" }, [t("selectFirst")]));
+        return;
+      }
+      var saved = nodeDiscovery(node).prompts;
+      if (saved.length > 0) {
+        prompts = saved;
+        renderPrompts();
+        renderArgs(prompts.find(function (x) { return x.name === cfg.prompt_name; }));
+        status.appendChild(el("div", { class: "ok" }, [saved.length + " " + t("promptsLabel") + " " + t("cached")]));
+        return;
+      }
+      if (!live) {
+        status.appendChild(el("div", { class: "hint" }, [t("noPrompts")]));
+        return;
+      }
+      uiCall("mcp.discover", discoveryParamsFor(node))
+        .then(function (result) {
+          prompts = result.prompts || [];
+          renderPrompts();
+          renderArgs(prompts.find(function (x) { return x.name === cfg.prompt_name; }));
+          status.appendChild(el("div", { class: "ok" }, [prompts.length + " " + t("promptsLabel")]));
+        })
+        .catch(function (e) {
+          status.appendChild(el("div", { class: "error" }, [t("discoverError") + ": " + e.message]));
+        });
+    }
+
+    var refreshBtn = el("button", { class: "primary" }, [t("refreshPrompts")]);
+    refreshBtn.addEventListener("click", function () { loadPrompts(cfg.connection_id || "", true); });
+    appEl.appendChild(field(t("prompt"), promptSelect));
+    appEl.appendChild(refreshBtn);
+    appEl.appendChild(status);
+    appEl.appendChild(argsArea);
+
+    renderPrompts();
+    renderArgs(prompts.find(function (x) { return x.name === cfg.prompt_name; }));
+    if (cfg.connection_id) loadPrompts(cfg.connection_id, false);
+
+    app.textContent = "";
+    app.appendChild(appEl);
+  }
+
+  /** mcp:close — connection dropdown (optional selection). */
+  function renderClosePanel() {
+    var cfg = state.config || {};
+    var appEl = el("div", {});
+    var connSelect = connectionSelect(cfg.connection_id || "", function (uuid) {
+      patchConfig({ connection_id: uuid });
+    });
+    appEl.appendChild(field(t("connection"), connSelect));
+    var manualId = el("input", {
+      type: "text",
+      placeholder: t("manualId"),
+      value: cfg.connection_id || "",
+      oninput: function (e) { patchConfig({ connection_id: e.target.value }); },
+    });
+    appEl.appendChild(field(t("manualId"), manualId));
+    app.textContent = "";
+    app.appendChild(appEl);
+  }
+
+  /* ============================================================
+   * Row/object helpers
+   * ============================================================ */
+  function toRows(obj) {
+    return Object.keys(obj || {}).map(function (k) {
+      return { k: k, v: String(obj[k]), isKey: true };
+    });
+  }
+  function rowsToObj(rows) {
+    var out = {};
+    rows.forEach(function (r) {
+      if (r.k && r.k.trim() !== "") out[r.k.trim()] = r.v;
+    });
+    return out;
+  }
+
+  function render() {
+    try {
+      switch (state.nodeType) {
+        case "mcp:connect": return renderConnectPanel();
+        case "mcp:call_tool": return renderCallToolPanel();
+        case "mcp:read_resource": return renderReadResourcePanel();
+        case "mcp:get_prompt": return renderGetPromptPanel();
+        case "mcp:close": return renderClosePanel();
+        default:
+          app.textContent = "Unknown node type: " + state.nodeType;
+      }
+    } catch (e) {
+      reportError(e.message);
+    }
+  }
+
+  /* ============================================================
+   * Inbound protocol (host → iframe). Identity: e.source === parent.
+   * ============================================================ */
+  window.addEventListener("message", function (e) {
+    if (e.source !== parent) return;
+    var msg = e.data;
+    if (!msg || typeof msg !== "object") return;
+    switch (msg.type) {
+      case "init": {
+        var p = msg.payload || {};
+        state.config = p.config && typeof p.config === "object" ? p.config : {};
+        state.variables = p.variables || {};
+        state.nodeType = p.nodeType || "";
+        state.locale = p.locale || "en-US";
+        state.nodes = Array.isArray(p.nodes) ? p.nodes : [];
+        state.discoverCache = null;
+        render();
+        break;
+      }
+      case "configUpdated": {
+        var cp = msg.payload || {};
+        state.config = cp.config && typeof cp.config === "object" ? cp.config : {};
+        render();
+        break;
+      }
+      case "actionResult": {
+        var ap = msg.payload || {};
+        var pending = pendingActions[ap.requestId];
+        if (!pending) break;
+        delete pendingActions[ap.requestId];
+        if (ap.error !== undefined) pending.reject(new Error(String(ap.error)));
+        else pending.resolve(ap.result);
+        break;
+      }
+      default:
+        break;
+    }
+  });
+
+  /* ============================================================
+   * Ready + resize
+   * ============================================================ */
+  post("ready", {});
+
+  function reportHeight() {
+    var h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, 1);
+    post("resize", { height: Math.ceil(h) + 12 });
+  }
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(reportHeight).observe(document.body);
+  } else {
+    window.addEventListener("load", reportHeight);
+  }
+  setTimeout(reportHeight, 50);
+})();
+</script>
+</body>
+</html>
