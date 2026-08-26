@@ -1,6 +1,6 @@
 [package]
 name = "mpe-plugin-mcp"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "MCP protocol sidecar plugin: connect/call_tool/read_resource/get_prompt/close"
 
