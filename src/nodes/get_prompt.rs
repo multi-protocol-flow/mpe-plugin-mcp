@@ -66,9 +66,15 @@ async fn get_prompt_core(
         prompt_params = prompt_params.with_arguments(args_map.clone());
     }
 
-    let result = peer
-        .get_prompt(prompt_params)
+    let timeout_ms = config
+        .get("timeout_ms")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(30000);
+    let timeout_dur = std::time::Duration::from_millis(timeout_ms.max(100));
+
+    let result = tokio::time::timeout(timeout_dur, peer.get_prompt(prompt_params))
         .await
+        .map_err(|_| format!("{}: {}ms", i18n::t("提示词获取超时", "prompt fetch timed out"), timeout_ms))?
         .map_err(|e| format!("{} '{prompt_name}': {e}", i18n::t("提示词获取失败", "prompt fetch failed")))?;
 
     let timing_ms = start.elapsed().as_millis() as u64;

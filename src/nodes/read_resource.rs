@@ -55,9 +55,15 @@ async fn read_resource_core(
     let peer = conn.service.peer().clone();
 
     let read_params = ReadResourceRequestParams::new(resource_uri.clone());
-    let result = peer
-        .read_resource(read_params)
+    let timeout_ms = config
+        .get("timeout_ms")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(30000);
+    let timeout_dur = std::time::Duration::from_millis(timeout_ms.max(100));
+
+    let result = tokio::time::timeout(timeout_dur, peer.read_resource(read_params))
         .await
+        .map_err(|_| format!("{}: {}ms", i18n::t("资源读取超时", "resource read timed out"), timeout_ms))?
         .map_err(|e| format!("{} '{resource_uri}': {e}", i18n::t("资源读取失败", "resource read failed")))?;
 
     let timing_ms = start.elapsed().as_millis() as u64;

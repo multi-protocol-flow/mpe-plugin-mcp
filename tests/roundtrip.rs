@@ -22,7 +22,7 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use serde_json::Value;
 
 /// Path to the compiled plugin binary (set by cargo for `[[bin]]` targets).
-const PLUGIN_BIN: &str = env!("CARGO_BIN_EXE_mpe_mcp_plugin");
+const PLUGIN_BIN: &str = env!("CARGO_BIN_EXE_mpe_plugin_mcp");
 
 /// The 5 node type_ids the plugin must describe (byte-sorted — the test
 /// compares against a sorted copy).
@@ -49,7 +49,7 @@ impl PluginProcess {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .expect("failed to spawn mpe_mcp_plugin");
+            .expect("failed to spawn mpe_plugin_mcp");
         let stdin = child.stdin.take().expect("plugin stdin unavailable");
         let stdout = child.stdout.take().expect("plugin stdout unavailable");
         PluginProcess {

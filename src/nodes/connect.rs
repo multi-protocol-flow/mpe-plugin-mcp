@@ -60,7 +60,15 @@ async fn connect_core(
     connection_id: &str,
     config: &serde_json::Value,
 ) -> Result<(ExecuteResult, bool), String> {
-    let conn = client::connect(config).await?;
+    let timeout_ms = config
+        .get("timeout_ms")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(30000);
+    let timeout_dur = std::time::Duration::from_millis(timeout_ms.max(100));
+
+    let conn = tokio::time::timeout(timeout_dur, client::connect(config))
+        .await
+        .map_err(|_| format!("{}: {}ms", i18n::t("连接超时", "connection timed out"), timeout_ms))??;
     let transport = conn.transport.clone();
     let url = conn.url.clone();
     let protocol_version = config

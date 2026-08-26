@@ -95,7 +95,7 @@ serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 
 [[bin]]
-name = "mpe_mcp_plugin"
+name = "mpe_plugin_mcp"
 path = "src/main.rs"
 
 [[bin]]
@@ -109,7 +109,7 @@ path = "src/bin/test_server.rs"
 
 ## 4. 构建与测试
 
-> **plugin.json 的 `entry.command`**：值为市场契约形式的相对路径 `./mpe_mcp_plugin`。
+> **plugin.json 的 `entry.command`**：值为市场契约形式的相对路径 `./mpe_plugin_mcp`。
 > 当前宿主以自身 CWD 解析该命令（不 chdir 到插件目录）。仓库内开发调试时，若需宿主
 > 直接拉起本插件，可把 command 改为本机绝对路径，或在插件目录下启动宿主。
 

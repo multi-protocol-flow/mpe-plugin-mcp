@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "MCP protocol plugin: connect/call_tool/read_resource/get_prompt/close",
   "entry": {
-    "command": "./mpe_mcp_plugin"
+    "command": "./mpe_plugin_mcp"
   },
   "env": {},
   "permissions": [],

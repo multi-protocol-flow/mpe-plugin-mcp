@@ -102,7 +102,7 @@ serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 
 [[bin]]
-name = "mpe_mcp_plugin"
+name = "mpe_plugin_mcp"
 path = "src/main.rs"
 
 [[bin]]
@@ -117,7 +117,7 @@ ring CryptoProvider first, then calls `__plugin_main::<McpPlugin>` directly.
 ## 4. Build and test
 
 > **plugin.json `entry.command`**: a relative path in marketplace-contract form,
-> `./mpe_mcp_plugin`. The current host resolves the command against its own CWD
+> `./mpe_plugin_mcp`. The current host resolves the command against its own CWD
 > (it does not chdir into the plugin directory). When developing in this
 > repository, if you want the host to launch the plugin directly, either change
 > `command` to an absolute path on your machine, or start the host from the

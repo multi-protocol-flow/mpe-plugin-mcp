@@ -67,9 +67,15 @@ async fn call_tool_core(
         call_params = call_params.with_arguments(args_map.clone());
     }
 
-    let result = peer
-        .call_tool(call_params)
+    let timeout_ms = config
+        .get("timeout_ms")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(30000);
+    let timeout_dur = std::time::Duration::from_millis(timeout_ms.max(100));
+
+    let result = tokio::time::timeout(timeout_dur, peer.call_tool(call_params))
         .await
+        .map_err(|_| format!("{}: {}ms", i18n::t("工具调用超时", "tool call timed out"), timeout_ms))?
         .map_err(|e| format!("{} '{tool_name}': {e}", i18n::t("工具调用失败", "tool call failed")))?;
 
     let timing_ms = start.elapsed().as_millis() as u64;

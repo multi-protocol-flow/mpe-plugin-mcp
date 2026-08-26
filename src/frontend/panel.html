@@ -134,6 +134,7 @@
       optional: "optional",
       required: "required",
       cached: "from saved discovery",
+      timeoutMs: "Timeout (ms)",
     },
     "zh-CN": {
       transport: "传输模式",
@@ -178,6 +179,7 @@
       optional: "可选",
       required: "必填",
       cached: "来自已保存的发现",
+      timeoutMs: "超时时间 (ms)",
     },
   };
 
@@ -312,6 +314,21 @@
     ]);
     if (hint) wrap.appendChild(el("div", { class: "hint" }, [hint]));
     return wrap;
+  }
+
+  function timeoutField(currentTimeout, onChange) {
+    var val = typeof currentTimeout === "number" ? currentTimeout : 30000;
+    var input = el("input", {
+      type: "number",
+      min: "100",
+      placeholder: "30000",
+      value: val,
+      oninput: function (e) {
+        var num = parseInt(e.target.value, 10);
+        onChange(isNaN(num) ? 30000 : num);
+      }
+    });
+    return field(t("timeoutMs"), input);
   }
 
   /** Key/value row editor used for headers + env.
@@ -704,6 +721,7 @@
 
     appEl.appendChild(httpBlock);
     appEl.appendChild(stdioBlock);
+    appEl.appendChild(timeoutField(cfg.timeout_ms, function (v) { patchConfig({ timeout_ms: v }); }));
     app.textContent = "";
     app.appendChild(appEl);
 
@@ -851,6 +869,7 @@
     appEl.appendChild(refreshBtn);
     appEl.appendChild(status);
     appEl.appendChild(argsArea);
+    appEl.appendChild(timeoutField(cfg.timeout_ms, function (v) { patchConfig({ timeout_ms: v }); }));
 
     renderTools();
     renderArgsFor(discovered.tools.find(function (x) { return x.name === cfg.tool_name; }));
@@ -943,6 +962,7 @@
     refreshBtn.addEventListener("click", function () { loadResources(cfg.connection_id || "", true); });
     appEl.appendChild(refreshBtn);
     appEl.appendChild(status);
+    appEl.appendChild(timeoutField(cfg.timeout_ms, function (v) { patchConfig({ timeout_ms: v }); }));
 
     renderResources();
     app.textContent = "";
@@ -1045,6 +1065,7 @@
     appEl.appendChild(refreshBtn);
     appEl.appendChild(status);
     appEl.appendChild(argsArea);
+    appEl.appendChild(timeoutField(cfg.timeout_ms, function (v) { patchConfig({ timeout_ms: v }); }));
 
     renderPrompts();
     renderArgs(prompts.find(function (x) { return x.name === cfg.prompt_name; }));

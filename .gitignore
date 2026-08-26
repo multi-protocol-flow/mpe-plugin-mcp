@@ -1,3 +1,7 @@
 /target/
 *.log
 .DS_Store
+/mpe_plugin_mcp
+/mpe_plugin_mcp.exe
+mpe_plugin_mcp
+mpe_plugin_mcp.exe
