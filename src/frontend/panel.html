@@ -6,23 +6,80 @@
 <title>MCP Config Panel</title>
 <style>
   :root {
+    color-scheme: light;
     --bg: #ffffff;
+    --bg-input: #ffffff;
     --fg: #1f2328;
     --muted: #6b7280;
     --border: #d0d7de;
+    --border-focus: #f59e0b;
     --accent: #f59e0b;
     --accent-fg: #1f2328;
     --danger: #dc2626;
     --ok: #16a34a;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme]) {
+      color-scheme: dark;
       --bg: #1a1d21;
+      --bg-input: #23272d;
       --fg: #e6e6e6;
       --muted: #9ca3af;
       --border: #3f444c;
+      --border-focus: #fbbf24;
       --accent-fg: #111827;
+      --danger: #f87171;
+      --ok: #4ade80;
     }
+    :root:not([data-theme]) select,
+    :root:not([data-theme]) select option,
+    :root:not([data-theme]) option,
+    :root:not([data-theme]) optgroup {
+      color-scheme: dark;
+      background-color: #23272d !important;
+      color: #e6e6e6 !important;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #1a1d21;
+    --bg-input: #23272d;
+    --fg: #e6e6e6;
+    --muted: #9ca3af;
+    --border: #3f444c;
+    --border-focus: #fbbf24;
+    --accent-fg: #111827;
+    --danger: #f87171;
+    --ok: #4ade80;
+  }
+  :root[data-theme="dark"] select,
+  :root[data-theme="dark"] select option,
+  :root[data-theme="dark"] option,
+  :root[data-theme="dark"] optgroup {
+    color-scheme: dark;
+    background-color: #23272d !important;
+    color: #e6e6e6 !important;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-input: #ffffff;
+    --fg: #1f2328;
+    --muted: #6b7280;
+    --border: #d0d7de;
+    --border-focus: #f59e0b;
+    --accent: #f59e0b;
+    --accent-fg: #1f2328;
+    --danger: #dc2626;
+    --ok: #16a34a;
+  }
+  :root[data-theme="light"] select,
+  :root[data-theme="light"] select option,
+  :root[data-theme="light"] option,
+  :root[data-theme="light"] optgroup {
+    color-scheme: light;
+    background-color: #ffffff !important;
+    color: #1f2328 !important;
   }
   * { box-sizing: border-box; }
   body {
@@ -34,14 +91,48 @@
   }
   .field { margin-bottom: 10px; }
   label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-  input[type="text"], input[type="url"], input[type="number"], select, textarea {
+  input[type="text"], input[type="url"], input[type="number"], textarea {
     width: 100%;
     padding: 6px 8px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    background: var(--bg);
+    background: var(--bg-input);
     color: var(--fg);
     font: inherit;
+  }
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: var(--border-focus);
+  }
+  select {
+    width: 100%;
+    padding: 6px 28px 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background-color: var(--bg-input);
+    color: var(--fg);
+    font: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+      linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position:
+      calc(100% - 15px) calc(50% - 2px),
+      calc(100% - 10px) calc(50% - 2px);
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    cursor: pointer;
+  }
+  select:focus {
+    outline: none;
+    border-color: var(--border-focus);
+  }
+  select option,
+  option,
+  optgroup {
+    background-color: var(--bg-input);
+    color: var(--fg);
   }
   textarea { resize: vertical; min-height: 48px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
   .row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
@@ -135,6 +226,7 @@
       required: "required",
       cached: "from saved discovery",
       timeoutMs: "Timeout (ms)",
+      argsHint: "Flags & arguments (space-separated or per row, e.g. --python 3.11 mcp-for-blender)",
     },
     "zh-CN": {
       transport: "传输模式",
@@ -180,6 +272,7 @@
       required: "必填",
       cached: "来自已保存的发现",
       timeoutMs: "超时时间 (ms)",
+      argsHint: "命令参数（支持空格分隔或逐行添加，如 --python 3.11 mcp-for-blender）",
     },
   };
 
@@ -202,6 +295,12 @@
     return dict[key] !== undefined ? dict[key] : key;
   }
 
+  function applyTheme(theme) {
+    if (theme === "light" || theme === "dark") {
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+    }
+  }
   /** Post a protocol message to the host (sandboxed opaque origin: '*' is the
    * only reachable target; identity is enforced by the host via event.source). */
   function post(type, payload) {
@@ -622,7 +721,7 @@
     if (transport === "stdio") {
       var cmdInput = el("input", {
         type: "text",
-        placeholder: "npx",
+        placeholder: "uvx / npx / python",
         value: cfg.command || "",
         oninput: function (e) {
           patchConfigDrop({ command: e.target.value }, DISCOVERY_KEYS);
@@ -665,6 +764,7 @@
       }, [t("addRow")]);
       argsEditor.appendChild(addArg);
       stdioBlock.appendChild(field(t("args"), argsEditor));
+      stdioBlock.appendChild(el("div", { class: "hint" }, [t("argsHint")]));
 
       var envRows = toRows(cfg.env || {});
       var envEditor = kvEditor(envRows, function (rows) {
@@ -674,12 +774,14 @@
       stdioBlock.appendChild(field(t("env"), envEditor));
     }
 
-    var protoInput = el("input", {
-      type: "text",
-      value: cfg.protocol_version || "2025-11-25",
-      oninput: function (e) { patchConfig({ protocol_version: e.target.value }); },
-    });
-    httpBlock.appendChild(field(t("protocolVersion"), protoInput));
+    if (transport === "streamable_http") {
+      var protoInput = el("input", {
+        type: "text",
+        value: cfg.protocol_version || "2025-11-25",
+        oninput: function (e) { patchConfig({ protocol_version: e.target.value }); },
+      });
+      httpBlock.appendChild(field(t("protocolVersion"), protoInput));
+    }
 
     // Discover button + result list
     var status = el("div", {});
@@ -715,12 +817,17 @@
         discoverBtn.textContent = t("discover");
       }
     });
-    httpBlock.appendChild(discoverBtn);
-    httpBlock.appendChild(status);
-    httpBlock.appendChild(discoveryBox);
+    var discoveryBlock = el("div", { class: "field" });
+    discoveryBlock.appendChild(discoverBtn);
+    discoveryBlock.appendChild(status);
+    discoveryBlock.appendChild(discoveryBox);
 
-    appEl.appendChild(httpBlock);
-    appEl.appendChild(stdioBlock);
+    if (transport === "streamable_http") {
+      appEl.appendChild(httpBlock);
+    } else {
+      appEl.appendChild(stdioBlock);
+    }
+    appEl.appendChild(discoveryBlock);
     appEl.appendChild(timeoutField(cfg.timeout_ms, function (v) { patchConfig({ timeout_ms: v }); }));
     app.textContent = "";
     app.appendChild(appEl);
@@ -1136,6 +1243,9 @@
     switch (msg.type) {
       case "init": {
         var p = msg.payload || {};
+        if (p.theme === "light" || p.theme === "dark") {
+          applyTheme(p.theme);
+        }
         state.config = p.config && typeof p.config === "object" ? p.config : {};
         state.variables = p.variables || {};
         state.nodeType = p.nodeType || "";
@@ -1143,6 +1253,13 @@
         state.nodes = Array.isArray(p.nodes) ? p.nodes : [];
         state.discoverCache = null;
         render();
+        break;
+      }
+      case "themeChanged": {
+        var tp = msg.payload || {};
+        if (tp.theme === "light" || tp.theme === "dark") {
+          applyTheme(tp.theme);
+        }
         break;
       }
       case "configUpdated": {

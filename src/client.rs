@@ -24,7 +24,7 @@ use rmcp::service::{RoleClient, RunningService, ServiceExt};
 use rmcp::transport::streamable_http_client::{
     StreamableHttpClientTransport, StreamableHttpClientTransportConfig,
 };
-use rmcp::transport::{ConfigureCommandExt, TokioChildProcess};
+use rmcp::transport::TokioChildProcess;
 use serde::Serialize;
 
 /// Streamable HTTP transport marker (`config["transport"]` value).
@@ -151,12 +151,12 @@ pub async fn connect(config: &serde_json::Value) -> Result<McpConnection, String
             create_streamable_http_transport(url, headers).await?
         }
         TRANSPORT_STDIO => {
-            let command = config
+            let command_raw = config
                 .get("command")
                 .and_then(serde_json::Value::as_str)
-                .filter(|cmd| !cmd.is_empty())
+                .filter(|cmd| !cmd.trim().is_empty())
                 .ok_or_else(|| "stdio transport requires a non-empty `command`".to_string())?;
-            let args = config
+            let args_raw = config
                 .get("args")
                 .and_then(serde_json::Value::as_array)
                 .map(|arr| {
@@ -166,6 +166,7 @@ pub async fn connect(config: &serde_json::Value) -> Result<McpConnection, String
                         .collect::<Vec<String>>()
                 })
                 .unwrap_or_default();
+            let (command, args) = parse_command_and_args(command_raw, &args_raw);
             let env = config
                 .get("env")
                 .and_then(serde_json::Value::as_object)
@@ -175,7 +176,7 @@ pub async fn connect(config: &serde_json::Value) -> Result<McpConnection, String
                         .collect::<HashMap<String, String>>()
                 })
                 .unwrap_or_default();
-            create_stdio_transport(command, args, env).await?
+            create_stdio_transport(&command, args, env).await?
         }
         other => return Err(format!("unsupported MCP transport `{other}`")),
     };
@@ -315,22 +316,109 @@ async fn create_streamable_http_transport(
     }
 }
 
-/// Creates a Stdio child-process transport.
+/// Normalizes stdio command and args with shell-style argument splitting.
+///
+/// If `command` contains spaces (e.g. `"uvx --python 3.11 mcp-for-blender"`),
+/// the first token becomes the executable binary and subsequent tokens are
+/// prepended to `args`.
+///
+/// Any entry in `args` that contains whitespace (e.g. `"--python 3.11"`) is
+/// split into separate arguments according to standard shell quoting rules,
+/// allowing users to either configure args per-row or paste space-separated flags.
+pub fn parse_command_and_args(command_raw: &str, args_raw: &[String]) -> (String, Vec<String>) {
+    let trimmed_cmd = command_raw.trim();
+    let (cmd, leading_args) = if trimmed_cmd.contains(' ') {
+        if let Some(tokens) = shlex::split(trimmed_cmd) {
+            if let Some((first, rest)) = tokens.split_first() {
+                (first.clone(), rest.to_vec())
+            } else {
+                (trimmed_cmd.to_string(), Vec::new())
+            }
+        } else {
+            (trimmed_cmd.to_string(), Vec::new())
+        }
+    } else {
+        (trimmed_cmd.to_string(), Vec::new())
+    };
+
+    let mut final_args = leading_args;
+    for arg in args_raw {
+        let trimmed_arg = arg.trim();
+        if trimmed_arg.is_empty() {
+            continue;
+        }
+        // Only split args that start with a flag prefix ('-') and contain whitespace
+        // (e.g. `"--python 3.11"` or `"--python 3.11 mcp-for-blender"`).
+        // Non-flag arguments (such as script strings or file paths with spaces)
+        // must stay intact.
+        if trimmed_arg.starts_with('-') && trimmed_arg.contains(' ') {
+            if let Some(tokens) = shlex::split(trimmed_arg) {
+                final_args.extend(tokens);
+            } else {
+                final_args.push(trimmed_arg.to_string());
+            }
+        } else {
+            final_args.push(trimmed_arg.to_string());
+        }
+    }
+
+    (cmd, final_args)
+}
+
+/// Creates a Stdio child-process transport with stderr capture for actionable errors.
 async fn create_stdio_transport(
     command: &str,
     args: Vec<String>,
     env: HashMap<String, String>,
 ) -> Result<RunningService<RoleClient, ()>, String> {
-    let transport = TokioChildProcess::new(tokio::process::Command::new(command).configure(|cmd| {
-        cmd.args(&args);
-        for (k, v) in &env {
-            cmd.env(k, v);
+    use std::sync::{Arc, Mutex};
+    use tokio::io::AsyncReadExt;
+
+    let mut cmd = tokio::process::Command::new(command);
+    cmd.args(&args);
+    for (k, v) in &env {
+        cmd.env(k, v);
+    }
+
+    let (transport, stderr_opt) = TokioChildProcess::builder(cmd)
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to start MCP process '{command}': {e}"))?;
+
+    let stderr_buf = Arc::new(Mutex::new(String::new()));
+    let stderr_clone = Arc::clone(&stderr_buf);
+    if let Some(mut stderr) = stderr_opt {
+        tokio::spawn(async move {
+            let mut buf = [0u8; 1024];
+            while let Ok(n) = stderr.read(&mut buf).await {
+                if n == 0 {
+                    break;
+                }
+                let chunk = String::from_utf8_lossy(&buf[..n]);
+                let mut lock = stderr_clone.lock().unwrap_or_else(|e| e.into_inner());
+                if lock.len() < 8192 {
+                    lock.push_str(&chunk);
+                }
+            }
+        });
+    }
+
+    match ().serve(transport).await {
+        Ok(service) => Ok(service),
+        Err(e) => {
+            // Small yield so the stderr reader can capture any EOF diagnostic
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            let stderr_text = {
+                let lock = stderr_buf.lock().unwrap_or_else(|e| e.into_inner());
+                lock.trim().to_string()
+            };
+            if stderr_text.is_empty() {
+                Err(format!("MCP stdio connection failed: {e}"))
+            } else {
+                Err(format!("MCP stdio connection failed: {e} (stderr: {stderr_text})"))
+            }
         }
-    }))
-    .map_err(|e| format!("failed to start MCP process '{command}': {e}"))?;
-    ().serve(transport)
-        .await
-        .map_err(|e| format!("MCP stdio connection failed: {e}"))
+    }
 }
 
 /// Display target for logs and pool idempotency: URL for http, `command
@@ -402,5 +490,58 @@ mod tests {
 
         let bare = serde_json::json!({ "transport": "stdio", "command": "mcp-server" });
         assert_eq!(display_target(&bare, TRANSPORT_STDIO), "mcp-server");
+    }
+
+    #[test]
+    fn test_parse_command_and_args() {
+        // Case 1: user entered whole command in `command` input
+        let (cmd, args) = parse_command_and_args("uvx --python 3.11 mcp-for-blender", &[]);
+        assert_eq!(cmd, "uvx");
+        assert_eq!(args, vec!["--python", "3.11", "mcp-for-blender"]);
+
+        // Case 2: user entered `--python 3.11` as one arg row
+        let (cmd, args) = parse_command_and_args(
+            "uvx",
+            &["--python 3.11".to_string(), "mcp-for-blender".to_string()],
+        );
+        assert_eq!(cmd, "uvx");
+        assert_eq!(args, vec!["--python", "3.11", "mcp-for-blender"]);
+
+        // Case 3: user entered whole tail in one arg row
+        let (cmd, args) =
+            parse_command_and_args("uvx", &["--python 3.11 mcp-for-blender".to_string()]);
+        assert_eq!(cmd, "uvx");
+        assert_eq!(args, vec!["--python", "3.11", "mcp-for-blender"]);
+
+        // Case 4: quoted arguments stay intact
+        let (cmd, args) = parse_command_and_args(
+            "python3 -u",
+            &["--msg \"hello world\"".to_string(), "script.py".to_string()],
+        );
+        assert_eq!(cmd, "python3");
+        assert_eq!(args, vec!["-u", "--msg", "hello world", "script.py"]);
+
+        // Case 5: normal separate args pass through unchanged
+        let (cmd, args) = parse_command_and_args(
+            "npx",
+            &["-y".to_string(), "@modelcontextprotocol/server-everything".to_string()],
+        );
+        assert_eq!(cmd, "npx");
+        assert_eq!(args, vec!["-y", "@modelcontextprotocol/server-everything"]);
+    }
+
+    #[tokio::test]
+    async fn test_stdio_stderr_capture_on_failure() {
+        let cfg = serde_json::json!({
+            "transport": "stdio",
+            "command": "python3",
+            "args": ["-c", "import sys; sys.stderr.write('custom failure reason: connection refused\\n'); sys.exit(1)"],
+            "env": {}
+        });
+        let err = connect(&cfg).await.err().expect("connect must fail");
+        assert!(
+            err.contains("custom failure reason: connection refused"),
+            "error should contain captured child stderr, got: {err}"
+        );
     }
 }

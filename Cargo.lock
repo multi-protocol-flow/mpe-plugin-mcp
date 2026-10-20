@@ -646,7 +646,7 @@ dependencies = [
 
 [[package]]
 name = "mpe-plugin-mcp"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "mpe-plugin-sdk",
  "reqwest",
@@ -654,6 +654,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "shlex",
  "tempfile",
  "tokio",
 ]

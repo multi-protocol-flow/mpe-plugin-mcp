@@ -1,6 +1,6 @@
 [package]
 name = "mpe-plugin-mcp"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "MCP protocol sidecar plugin: connect/call_tool/read_resource/get_prompt/close"
 
@@ -22,6 +22,7 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "rus
 rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+shlex = "2.0"
 tokio = { version = "1", features = ["full"] }
 
 [dev-dependencies]
