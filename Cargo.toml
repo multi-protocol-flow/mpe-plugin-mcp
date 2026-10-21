@@ -3,6 +3,8 @@ name = "mpe-plugin-mcp"
 version = "0.1.3"
 edition = "2021"
 description = "MCP protocol sidecar plugin: connect/call_tool/read_resource/get_prompt/close"
+license = "MIT"
+repository = "https://github.com/multi-protocol-flow/mpe-plugin-mcp"
 
 [dependencies]
 # Official plugin: public SDK only, never host types (flow-engine-core etc.)

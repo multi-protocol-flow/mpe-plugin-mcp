@@ -163,3 +163,7 @@ mpe run-node '{"type":"mcp:connect","transport":"stdio","command":"/path/to/your
 - 宿主适配点：`capabilities.single_node` 由宿主 `execute_single_node` /
   `mpe run-node` 的能力门读取（`NodePlugin::supports_single_node()` +
   `SidecarPlugin` 透传），插件侧无需感知宿主实现细节。
+
+## 许可证
+
+MIT，详见 [LICENSE](./LICENSE)。

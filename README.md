@@ -180,3 +180,7 @@ server over real stdio), or can be assembled in the MPE editor.
   `execute_single_node` / `mpe run-node` capability gate
   (`NodePlugin::supports_single_node()` + `SidecarPlugin` passthrough); the
   plugin never needs to know host implementation details.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
