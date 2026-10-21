@@ -170,6 +170,137 @@
   .tool-arg { margin-top: 6px; }
   .switch { display: flex; align-items: center; gap: 6px; }
   .switch input { width: auto; }
+  .segmented-control {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-input);
+    padding: 2px;
+    gap: 2px;
+  }
+  .segmented-control button {
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .segmented-control button:hover {
+    color: var(--fg);
+  }
+  .segmented-control button.active {
+    background: var(--bg);
+    color: var(--fg);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    font-weight: 600;
+  }
+  .args-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    margin-top: 8px;
+  }
+  .args-toolbar-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .raw-json-area {
+    width: 100%;
+    min-height: 160px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    resize: vertical;
+    tab-size: 2;
+  }
+  .json-status {
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .arg-field {
+    margin-bottom: 10px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+  }
+  .arg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .arg-title {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .arg-name {
+    color: var(--fg);
+  }
+  .arg-req {
+    color: var(--danger);
+    font-weight: bold;
+  }
+  .arg-type {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .arg-desc {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    line-height: 1.4;
+    word-break: break-word;
+  }
+  .arg-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .btn-subtle {
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 2px 6px;
+    font-size: 11px;
+    color: var(--muted);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .btn-subtle:hover {
+    border-color: var(--border);
+    color: var(--fg);
+  }
+  .btn-subtle.active {
+    background: var(--border);
+    color: var(--fg);
+  }
+  .arg-textarea {
+    width: 100%;
+    min-height: 64px;
+    resize: vertical;
+    line-height: 1.4;
+  }
+  .arg-json-block {
+    width: 100%;
+    min-height: 72px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    resize: vertical;
+    line-height: 1.4;
+  }
 </style>
 </head>
 <body>
@@ -227,6 +358,14 @@
       cached: "from saved discovery",
       timeoutMs: "Timeout (ms)",
       argsHint: "Flags & arguments (space-separated or per row, e.g. --python 3.11 mcp-for-blender)",
+      formMode: "Form",
+      rawMode: "JSON (Raw)",
+      switchToMultiline: "Multiline",
+      switchToSingleline: "Single-line",
+      jsonParseError: "Invalid JSON syntax",
+      mustBeObject: "Arguments must be a JSON object",
+      resourceSelectHint: "Select from discovered resources to auto-fill the URI below",
+      resourceUriPlaceholder: "e.g. file:///workspace/{{project}}/file.txt",
     },
     "zh-CN": {
       transport: "传输模式",
@@ -273,6 +412,14 @@
       cached: "来自已保存的发现",
       timeoutMs: "超时时间 (ms)",
       argsHint: "命令参数（支持空格分隔或逐行添加，如 --python 3.11 mcp-for-blender）",
+      formMode: "表单模式",
+      rawMode: "JSON 模式",
+      switchToMultiline: "多行",
+      switchToSingleline: "单行",
+      jsonParseError: "JSON 语法错误",
+      mustBeObject: "参数必须是 JSON 对象",
+      resourceSelectHint: "选择已发现的资源可自动填入下方 URI",
+      resourceUriPlaceholder: "例如 file:///workspace/{{project}}/file.txt",
     },
   };
 
@@ -570,75 +717,223 @@
    * Argument form renderers (per input_schema)
    * ============================================================ */
   /** Renders inputs for schema.properties into `arguments` (object). */
-  function renderArgumentFields(schema, argumentsObj, onChange) {
+  /** Renders inputs for schema.properties into `arguments` (object).
+   *  Supports Form view and Raw JSON view with seamless switching.
+   *  options: { isPrompt?: boolean } */
+  function renderArgumentFields(schema, argumentsObj, options, onChange) {
+    if (typeof options === "function") {
+      onChange = options;
+      options = {};
+    }
+    options = options || {};
+    var isPrompt = !!options.isPrompt;
     var wrap = el("div", { class: "tool-arg" }, []);
-    if (!schema || !schema.properties) {
-      // Complex/unknown schema → JSON textarea fallback.
-      var jsonArea = el("textarea", {
-        placeholder: t("jsonArgs"),
-        value: Object.keys(argumentsObj).length ? JSON.stringify(argumentsObj, null, 2) : "",
+
+    var hasProperties = schema && schema.properties && Object.keys(schema.properties).length > 0;
+    // 无可用属性定义时自动回退并锁定在 Raw JSON 模式
+    var currentMode = hasProperties ? ((state.config && state.config.args_mode) || "form") : "json";
+    var multilineState = {};
+    var rawJsonError = null;
+
+    function render() {
+      wrap.textContent = "";
+
+      // 当有明确的属性定义时渲染顶部切换工具栏
+      if (hasProperties) {
+        var toolbar = el("div", { class: "args-toolbar" });
+        var title = el("span", { class: "args-toolbar-label" }, [isPrompt ? t("promptArgs") : t("toolArgs")]);
+        var segControl = el("div", { class: "segmented-control" });
+
+        var formBtn = el("button", {
+          type: "button",
+          class: currentMode === "form" ? "active" : "",
+          onclick: function () {
+            if (currentMode === "form") return;
+            if (rawJsonError) {
+              alert(t("jsonParseError") + ": " + rawJsonError);
+              return;
+            }
+            currentMode = "form";
+            patchConfig({ args_mode: "form" });
+            render();
+          },
+        }, [t("formMode")]);
+
+        var rawBtn = el("button", {
+          type: "button",
+          class: currentMode === "json" ? "active" : "",
+          onclick: function () {
+            if (currentMode === "json") return;
+            currentMode = "json";
+            rawJsonError = null;
+            patchConfig({ args_mode: "json" });
+            render();
+          },
+        }, [t("rawMode")]);
+
+        segControl.appendChild(formBtn);
+        segControl.appendChild(rawBtn);
+        toolbar.appendChild(title);
+        toolbar.appendChild(segControl);
+        wrap.appendChild(toolbar);
+      }
+
+      if (currentMode === "json") {
+        renderRawView(wrap);
+      } else {
+        renderFormView(wrap);
+      }
+    }
+
+    function renderRawView(container) {
+      var rawBox = el("div", { class: "raw-json-box" });
+      var statusEl = el("div", { class: "json-status" });
+      var currentText = (argumentsObj && Object.keys(argumentsObj).length > 0)
+        ? JSON.stringify(argumentsObj, null, 2)
+        : "";
+
+      var textarea = el("textarea", {
+        class: "raw-json-area",
+        placeholder: "{\n  \"key\": \"value\"\n}",
+        value: currentText,
         oninput: function (e) {
-          var parsed = {};
-          var raw = e.target.value.trim();
-          if (raw) {
-            try { parsed = JSON.parse(raw); }
-            catch (err) { return; /* keep last good value; emit nothing */ }
+          var text = e.target.value.trim();
+          if (!text) {
+            rawJsonError = null;
+            statusEl.textContent = "";
+            statusEl.className = "json-status";
+            argumentsObj = {};
+            onChange(argumentsObj);
+            return;
           }
-          onChange(parsed);
+          try {
+            var parsed = JSON.parse(text);
+            if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+              rawJsonError = t("mustBeObject");
+              statusEl.textContent = rawJsonError;
+              statusEl.className = "json-status error";
+              return;
+            }
+            rawJsonError = null;
+            statusEl.textContent = "";
+            statusEl.className = "json-status";
+            argumentsObj = parsed;
+            onChange(argumentsObj);
+          } catch (err) {
+            rawJsonError = err.message;
+            statusEl.textContent = t("jsonParseError") + ": " + err.message;
+            statusEl.className = "json-status error";
+          }
         },
       });
-      wrap.appendChild(field(t("toolArgs"), jsonArea));
-      return wrap;
+
+      rawBox.appendChild(textarea);
+      rawBox.appendChild(statusEl);
+      container.appendChild(rawBox);
     }
-    var props = schema.properties;
-    var table = el("table", { class: "params" }, [
-      el("thead", {}, [el("tr", {}, [
-        el("th", {}, [t("paramsTable")]),
-        el("th", {}, [t("toolArgs")]),
-      ])]),
-    ]);
-    var tbody = el("tbody", {});
-    table.appendChild(tbody);
-    Object.keys(props).forEach(function (key) {
-      var prop = props[key] || {};
-      var required = Array.isArray(schema.required) && schema.required.indexOf(key) !== -1;
-      var label = el("td", {}, [key + (required ? " *" : "")]);
-      var inputCell = el("td", {}, [argInput(key, prop, argumentsObj, onChange)]);
-      tbody.appendChild(el("tr", {}, [label, inputCell]));
-    });
-    wrap.appendChild(table);
+
+    function renderFormView(container) {
+      var formBox = el("div", { class: "args-form-box" });
+      var props = schema.properties || {};
+
+      Object.keys(props).forEach(function (key) {
+        var prop = props[key] || {};
+        var required = Array.isArray(schema.required) && schema.required.indexOf(key) !== -1;
+        var type = prop.type || "string";
+
+        if (multilineState[key] === undefined) {
+          if (isPrompt) {
+            multilineState[key] = true;
+          } else if (type === "string") {
+            var isLongText = /prompt|query|content|text|sql|code|message|body|markdown|doc|description/i.test(key)
+              || (prop.description && /prompt|query|content|text|sql|code|message|body|markdown|doc/i.test(prop.description))
+              || (typeof argumentsObj[key] === "string" && argumentsObj[key].indexOf("\n") !== -1);
+            multilineState[key] = isLongText;
+          } else {
+            multilineState[key] = false;
+          }
+        }
+
+        var fieldCard = el("div", { class: "arg-field" });
+        var header = el("div", { class: "arg-header" });
+        var title = el("div", { class: "arg-title" }, [
+          el("span", { class: "arg-name" }, [key]),
+          required ? el("span", { class: "arg-req" }, ["*"]) : null,
+          el("span", { class: "arg-type" }, [type]),
+        ]);
+
+        var actions = el("div", { class: "arg-actions" });
+        if (type === "string") {
+          var isMulti = !!multilineState[key];
+          var toggleBtn = el("button", {
+            type: "button",
+            class: "btn-subtle" + (isMulti ? " active" : ""),
+            onclick: function () {
+              multilineState[key] = !isMulti;
+              render();
+            },
+          }, [isMulti ? t("switchToSingleline") : t("switchToMultiline")]);
+          actions.appendChild(toggleBtn);
+        }
+
+        header.appendChild(title);
+        header.appendChild(actions);
+        fieldCard.appendChild(header);
+
+        if (prop.description) {
+          fieldCard.appendChild(el("div", { class: "arg-desc" }, [prop.description]));
+        }
+
+        var control = renderArgControl(key, prop, argumentsObj, !!multilineState[key], function (val) {
+          var next = Object.assign({}, argumentsObj);
+          if (val === "" || val === undefined || val === null) {
+            delete next[key];
+          } else {
+            next[key] = val;
+          }
+          argumentsObj = next;
+          onChange(argumentsObj);
+        });
+
+        fieldCard.appendChild(control);
+        formBox.appendChild(fieldCard);
+      });
+
+      container.appendChild(formBox);
+    }
+
+    render();
     return wrap;
   }
 
-  function argInput(key, prop, argumentsObj, onChange) {
+  function renderArgControl(key, prop, argumentsObj, isMultiline, apply) {
     var type = prop.type || "string";
-    var input;
-    var apply = function (value) {
-      var next = Object.assign({}, argumentsObj);
-      if (value === "" || value === undefined || value === null) delete next[key];
-      else next[key] = value;
-      onChange(next);
-    };
+
     if (prop.enum && Array.isArray(prop.enum)) {
-      input = el("select", {
+      var select = el("select", {
         onchange: function (e) { apply(e.target.value === "" ? undefined : e.target.value); },
       });
-      input.appendChild(el("option", { value: "" }, ["—"]));
+      select.appendChild(el("option", { value: "" }, ["—"]));
       prop.enum.forEach(function (opt) {
         var o = el("option", { value: String(opt) }, [String(opt)]);
         if (String(argumentsObj[key]) === String(opt)) o.selected = true;
-        input.appendChild(o);
+        select.appendChild(o);
       });
-    } else if (type === "boolean") {
-      input = el("div", { class: "switch" }, [
+      return select;
+    }
+
+    if (type === "boolean") {
+      return el("div", { class: "switch" }, [
         el("input", {
           type: "checkbox",
           checked: !!argumentsObj[key],
           onchange: function (e) { apply(!!e.target.checked); },
         }),
       ]);
-    } else if (type === "integer" || type === "number") {
-      input = el("input", {
+    }
+
+    if (type === "integer" || type === "number") {
+      return el("input", {
         type: "number",
         value: argumentsObj[key] !== undefined ? String(argumentsObj[key]) : "",
         oninput: function (e) {
@@ -646,26 +941,71 @@
           apply(raw === "" ? undefined : Number(raw));
         },
       });
-    } else if (type === "array") {
-      input = el("input", {
-        type: "text",
-        value: Array.isArray(argumentsObj[key])
-          ? argumentsObj[key].map(String).join(", ")
-          : "",
-        placeholder: "a, b, c",
+    }
+
+    if (type === "array") {
+      var arrVal = Array.isArray(argumentsObj[key]) ? argumentsObj[key] : [];
+      return el("textarea", {
+        class: "arg-textarea",
+        style: "min-height: 52px;",
+        placeholder: "item 1\nitem 2\n...",
+        value: arrVal.join("\n"),
         oninput: function (e) {
           var raw = e.target.value.trim();
-          apply(raw === "" ? undefined : raw.split(",").map(function (s) { return s.trim(); }).filter(Boolean));
+          if (!raw) { apply(undefined); return; }
+          var parts = raw.split(/[\n,]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+          apply(parts);
         },
       });
-    } else {
-      input = el("input", {
-        type: "text",
+    }
+
+    if (type === "object") {
+      var currentObj = argumentsObj[key];
+      var objVal = (currentObj && typeof currentObj === "object")
+        ? JSON.stringify(currentObj, null, 2)
+        : "";
+      return el("textarea", {
+        class: "arg-json-block",
+        placeholder: "{\n  \"key\": \"value\"\n}",
+        value: objVal,
+        oninput: function (e) {
+          var raw = e.target.value.trim();
+          if (!raw) {
+            e.target.style.borderColor = "";
+            apply(undefined);
+            return;
+          }
+          try {
+            var parsed = JSON.parse(raw);
+            if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+              e.target.style.borderColor = "";
+              apply(parsed);
+            } else {
+              e.target.style.borderColor = "var(--danger)";
+            }
+          } catch (err) {
+            e.target.style.borderColor = "var(--danger)";
+          }
+        },
+      });
+    }
+
+    // Default: string
+    if (isMultiline) {
+      return el("textarea", {
+        class: "arg-textarea",
+        placeholder: prop.description ? "" : key,
         value: argumentsObj[key] !== undefined ? String(argumentsObj[key]) : "",
         oninput: function (e) { apply(e.target.value); },
       });
     }
-    return input;
+
+    return el("input", {
+      type: "text",
+      placeholder: prop.description ? "" : key,
+      value: argumentsObj[key] !== undefined ? String(argumentsObj[key]) : "",
+      oninput: function (e) { apply(e.target.value); },
+    });
   }
 
   /* ============================================================
@@ -914,7 +1254,7 @@
     function renderArgsFor(tool) {
       argsArea.textContent = "";
       if (!tool) return;
-      argsArea.appendChild(renderArgumentFields(tool.input_schema, cfg.arguments || {}, function (args) {
+      argsArea.appendChild(renderArgumentFields(tool.input_schema, cfg.arguments || {}, { isPrompt: false }, function (args) {
         patchConfig({ arguments: args });
       }));
     }
@@ -993,10 +1333,25 @@
     var status = el("div", {});
     var resources = [];
 
-    var resSelect = el("select", { onchange: function (e) { patchConfig({ resource_uri: e.target.value }); renderMime(); } });
+    var uriInput = el("input", {
+      type: "text",
+      placeholder: t("resourceUriPlaceholder"),
+      value: cfg.resource_uri || "",
+      oninput: function (e) {
+        patchConfig({ resource_uri: e.target.value });
+        renderMime();
+      },
+    });
+
+    var resSelect = el("select", { onchange: function (e) {
+      var val = e.target.value;
+      patchConfig({ resource_uri: val });
+      uriInput.value = val;
+      renderMime();
+    } });
     function renderResources() {
       resSelect.textContent = "";
-      var current = cfg.resource_uri || "";
+      var current = (state.config && state.config.resource_uri) || cfg.resource_uri || "";
       var exists = resources.some(function (r) { return r.uri === current; });
       if (resources.length === 0) {
         resSelect.appendChild(el("option", { value: "" }, [t("noResources")]));
@@ -1030,8 +1385,8 @@
 
     var mimeBadge = el("span", { class: "mime", id: "mime-badge" }, [""]);
     var resRow = el("div", { class: "row" }, [resSelect, mimeBadge]);
-    appEl.appendChild(field(t("resource"), resRow));
-
+    appEl.appendChild(field(t("resource"), resRow, t("resourceSelectHint")));
+    appEl.appendChild(field(t("resourceUri"), uriInput));
     /** 填充资源下拉：优先引用连接节点已保存的发现快照（不发起网络请求）；
      *  快照为空且 live 时回退到 uiCall 实时发现（会话级，不写回连接节点）。 */
     function loadResources(uuid, live) {
@@ -1122,7 +1477,7 @@
         });
         schema = { type: "object", properties: props, required: required };
       }
-      argsArea.appendChild(renderArgumentFields(schema, cfg.arguments || {}, function (args) {
+      argsArea.appendChild(renderArgumentFields(schema, cfg.arguments || {}, { isPrompt: true }, function (args) {
         patchConfig({ arguments: args });
       }));
     }

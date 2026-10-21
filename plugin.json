@@ -1,6 +1,6 @@
 {
   "name": "mcp",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "MCP protocol plugin: connect/call_tool/read_resource/get_prompt/close",
   "entry": {
     "command": "./mpe_plugin_mcp"
